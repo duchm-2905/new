@@ -10,7 +10,7 @@ metadata:
   labels:
     app: nginx # Label chung cho ?ng d?ng
 spec:
-  replicas: 2 # Ch?y 2 b?n sao ?? t?ng t�nh s?n s�ng (high availability)
+  replicas: 3 # Ch?y 2 b?n sao ?? t?ng t�nh s?n s�ng (high availability)
   selector:
     matchLabels:
       app: nginx # Selector c?a Deployment ph?i kh?p v?i label c?a template Pod
