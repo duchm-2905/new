@@ -1,0 +1,93 @@
+# nginx-optimized.yaml
+
+# ===== T?i ?u 1: S? d?ng Deployment thay v� Pod =====
+# Deployment qu?n l? Pod, ??m b?o ?ng d?ng lu�n ch?y v?i s? l??ng b?n sao mong mu?n,
+# h? tr? t? ph?c h?i (self-healing) v� c?p nh?t kh�ng gi�n ?o?n (rolling updates).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+  labels:
+    app: nginx # Label chung cho ?ng d?ng
+spec:
+  replicas: 2 # Ch?y 2 b?n sao ?? t?ng t�nh s?n s�ng (high availability)
+  selector:
+    matchLabels:
+      app: nginx # Selector c?a Deployment ph?i kh?p v?i label c?a template Pod
+  template: # ?�y l� "b?n thi?t k?" cho c�c Pod s? ???c t?o ra
+    metadata:
+      labels:
+        app: nginx # <--- Label n�y ph?i kh?p v?i matchLabels ? tr�n
+    spec:
+      # ===== Security Context ? c?p ?? POD =====
+      # C�c c�i ??t n�y s? ???c �p d?ng cho t?t c? c�c container trong Pod.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        runAsGroup: 101 # <<< THÊM DÒNG NÀY
+        fsGroup: 101
+      volumes:
+      - name: nginx-cache
+        emptyDir: {}
+      - name: nginx-tmp
+        emptyDir: {}
+      - name: nginx-run
+        emptyDir: {}
+      containers:
+      - name: nginx-container
+        image: nginx:1.25.3-alpine
+        ports:
+        - containerPort: 80
+          name: http
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+        # ===== Gắn các volume đã tạo vào container =====
+        volumeMounts:
+        - name: nginx-cache
+          mountPath: /var/cache/nginx
+        - name: nginx-tmp
+          mountPath: /tmp
+        - name: nginx-run
+          mountPath: /var/run
+        livenessProbe:
+          httpGet:
+            path: / # G?i y�u c?u GET ??n trang ch?
+            port: http # Kubernetes s? t? t�m port 80 nh? v�o t�n 'http' ? tr�n
+          initialDelaySeconds: 5 # Ch? 5 gi�y sau khi container kh?i ??ng m?i b?t ??u ki?m tra
+          periodSeconds: 10 # C? 10 gi�y ki?m tra m?t l?n
+        readinessProbe:
+          httpGet:
+            path: /
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 5
+
+        # ===== T?i ?u 5: Qu?n l? t�i nguy�n (Requests & Limits) =====
+        # C?c k? quan tr?ng ?? ??m b?o ?n ??nh cho to�n b? cluster.
+        resources:
+          requests: # T�i nguy�n t?i thi?u ???c ??m b?o
+            cpu: "100m" # 100 millicores (0.1 CPU)
+            memory: "128Mi" # 128 Mebibytes
+          limits: # T�i nguy�n t?i ?a ???c ph�p s? d?ng
+            cpu: "200m"
+            memory: "256Mi"
+---
+
+# ===== T?i ?u cho Service =====
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-service
+spec:
+  # Selector n�y ph?p v?i label c?a Pod trong template c?a Deployment
+  selector:
+    app: nginx
+  ports:
+  - name: http # ??t t�n port ? ?�y ?? ??ng b?
+    protocol: TCP
+    port: 80        # Port c?a Service
+    targetPort: http  # <--- Tr? ??n port c� t�n 'http' c?a Pod (t?c port 80)
+  # Type: LoadBalancer # Gi? nguy�n n?u b?n c?n truy c?p t? b�n ngo�i tr�n Minikube/Cloud
+  # C�n nh?c d�ng ClusterIP n?u b?n s? d�ng Ingress ?? qu?n l? truy c?p t? b�n ngo�i.
+  type: ClusterIP
